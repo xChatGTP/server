@@ -2,68 +2,42 @@ import { default as bnjs } from 'bignumber.js'
 import { BigNumber, utils } from 'ethers'
 
 import { NATIVE_TOKENS, TOKENS, ZERO_ADDRESS } from './constants'
-import { GTPResponse } from './types'
+import {
+  GTPResponse,
+  MapBridgeReturn,
+  MapSwapAction,
+  MapSwapReturn,
+  MapSwapUniswapFee,
+} from './types'
 
-enum MapSwapAction {
-  NATIVE_TO_TOKEN,
-  TOKEN_TO_NATIVE,
-  TOKEN_TO_TOKEN,
-}
-
-type MapSwapUniswapFee = 100 | 500 | 3000 | 10000 // 0.01%, 0.05%, 0.3%, 1%
-
-interface MapSwapReturn {
-  fn: string,
-  selector: string,
-  args: {
-    // path?: [string[], MapSwapUniswapFee[]],
-    path?: string, // encoded version of above
-    amountIn?: string,
-    amountInMaximum?: string,
-    amountOut?: string,
-    amountOutMinimum?: string,
-    tokenIn?: string,
-    fee?: string,
-    sqrtPriceLimitX96?: string,
-  },
-  argsOrder: string[],
-  calldata: string,
-  readable: {
-    chain?: string,
-    action?: string,
-    platform?: string,
-    tokens?: {
-      name: string,
-      address: string,
-      relation: string,
-    }[],
-  },
-}
-
-export type GTPMappingReturn = MapSwapReturn
+export type GTPMappingReturn = MapSwapReturn | MapBridgeReturn
 
 export default class GTPMapping {
   private static supportedChains = {
-    swap: ['ethereum', 'polygon']
+    swap: ['ethereum', 'polygon'],
+    bridge: ['ethereum', 'polygon'],
   }
 
   private static supportedPlatforms = {
-    swap: ['uniswap']
+    swap: ['uniswap'],
+    bridge: ['bridge'],
   }
 
   private static supportedTokens = {
-    swap: ['ETH', 'MATIC', 'USDC']
+    swap: ['ETH', 'MATIC', 'USDC'],
+    bridge: ['ETH', 'MATIC'], // only native tokens (Axelar restriction)
   }
 
   public static mapActions(inp: GTPResponse): GTPMappingReturn {
     if (inp.action === 'swap') return this.mapSwap(inp)
+    else if (inp.action === 'bridge') return this.mapBridge(inp)
     throw new Error('Invalid action!')
   }
 
   private static mapSwap(inp: GTPResponse): MapSwapReturn {
     const { relations } = inp
     const platform = inp.platform.toLowerCase()
-    const chain = inp.chain.toLowerCase()
+    const chain = inp.chain.origin.toLowerCase()
 
     if (!(this.supportedChains.swap.includes(chain))) throw new Error('Invalid swap chain!')
     if (!(this.supportedPlatforms.swap.includes(platform))) throw new Error('Invalid swap platform!')
@@ -100,7 +74,10 @@ export default class GTPMapping {
       calldata: '0x',
       readable: {
         action: 'swap',
-        chain,
+        chain: {
+          origin: chain,
+          dest: chain,
+        },
         tokens: [
           {
             name: fromEntity,
@@ -138,11 +115,77 @@ export default class GTPMapping {
         ret.args.amountOutMinimum = this.zeroPadHex('1', 32) // set to min, 1 (incl decimals)
         ret.args.sqrtPriceLimitX96 = this.zeroPadHex('0', 32)
       }
+      // TODO: TOKEN_TO_TOKEN
 
       ret.calldata += this.combineArgs(ret.argsOrder, ret.args)
     }
 
     return ret
+  }
+
+  private static mapBridge(inp: GTPResponse): MapBridgeReturn {
+    // Bridge all swapped MATIC to Polygon
+    // {
+    //   "platform": "Bridge",
+    //   "chain": "Polygon",
+    //   "action": "bridge",
+    //   "relations": [
+    //   {
+    //     "relation": "from",
+    //     "entity": "MATIC",
+    //     "value": "all" // 100% of previous output
+    //   },
+    //   {
+    //     "relation": "to",
+    //     "entity": "null",
+    //     "value": "null"
+    //   }
+    // ]
+    // }
+    const { relations } = inp
+    const platform = inp.platform.toLowerCase()
+    const chain = {
+      origin: inp.chain.origin.toLowerCase(),
+      dest: inp.chain.dest.toLowerCase(),
+    }
+
+    if (!(this.supportedChains.bridge.includes(chain.origin))) throw new Error('Invalid bridge origin chain!')
+    if (!(this.supportedChains.bridge.includes(chain.dest))) throw new Error('Invalid bridge dest chain!')
+    if (!(this.supportedPlatforms.bridge.includes(platform))) throw new Error('Invalid bridge platform!')
+
+    const from = relations.find(r => r.relation === 'from')
+    if (!from) throw new Error('Invalid bridge relations!')
+
+    const fromEntity = from.entity.toUpperCase()
+    // @ts-ignore
+    let fromToken = TOKENS[chain.origin][fromEntity]
+    console.log(fromToken, this.getWrappedNativeToken(chain.origin))
+    if (!fromToken || fromToken !== ZERO_ADDRESS) throw new Error('Invalid bridge token!')
+    fromToken = this.getWrappedNativeToken(chain.origin) // wrap the native token
+
+    return {
+      fn: 'bridge',
+      readable: {
+        chain: {
+          origin: chain.origin,
+          dest: chain.dest,
+        },
+        action: 'bridge',
+        platform: 'bridge',
+        tokens: [
+          {
+            name: fromEntity,
+            address: fromToken,
+            relation: 'from',
+          },
+          {
+            name: fromEntity,
+            address: ZERO_ADDRESS,
+            relation: 'to',
+          }
+        ],
+      }
+    }
   }
 
   private static getDecimals(token: string): number {

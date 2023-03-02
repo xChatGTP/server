@@ -1,9 +1,13 @@
+// bridge "all" => 100% of previous output
 const fewShotPrompt = `
 Prompt: Swap 100 DAI to MATIC on Ethereum
 Analyze in JSON format: 
 {
   "platform": "Uniswap",
-  "chain": "Ethereum",
+  "chain": {
+    "origin": "Ethereum",
+    "dest": "Ethereum"
+  },
   "action": "swap",
   "relations": [
     {
@@ -23,7 +27,10 @@ Prompt: Swap 1 AVAX to USDC using Pangolin on Avalanche
 Analyze in JSON format: 
 {
   "platform": "Pangolin",
-  "chain": "Avalanche",
+  "chain": {
+    "origin": "Avalanche",
+    "dest": "Avalanche"
+  },
   "action": "swap",
   "relations": [
     {
@@ -39,17 +46,20 @@ Analyze in JSON format:
   ]
 }
 ########
-Prompt: Bridge all swapped MATIC to Polygon
+Prompt: Bridge all swapped MATIC from Ethereum to Polygon
 Analyze in JSON format:
 {
   "platform": "Bridge",
-  "chain": "Polygon",
+  "chain": {
+    "origin": "Ethereum",
+    "dest": "Polygon"
+  },
   "action": "bridge",
   "relations": [
     {
       "relation": "from",
       "entity": "MATIC",
-      "value": "all" // 100% of previous output
+      "value": "all"
     },
     {
       "relation": "to",
@@ -63,7 +73,10 @@ Prompt: LP all MATIC and USDC on Uniswap on Polygon
 Analyze in JSON format:
 {
   "platform": "Uniswap",
-  "chain": "Polygon",
+  "chain": {
+    "origin": "Polygon",
+    "dest": "Polygon"
+  },
   "action": "liquidity provide",
   "relations": [
     {

@@ -1,9 +1,12 @@
+import cors from 'cors'
 import express from 'express'
 
 import GTPMachine from './gtp-machine'
 
 const app = express()
 const port = 8080
+
+app.use(cors())
 
 app.get('/generate', async (req, res) => {
   const prompt = req.query.prompt as string
@@ -13,8 +16,8 @@ app.get('/generate', async (req, res) => {
   }
 
   try {
-    // const gtpRes = await GTPMachine.generate(prompt)
-    const gtpRes = GTPMachine.generateExample()
+    const gtpRes = await GTPMachine.generate(prompt)
+    // const gtpRes = GTPMachine.generateExample()
     res.status(200).send(gtpRes)
   } catch (e) {
     console.log(e)

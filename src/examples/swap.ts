@@ -3,7 +3,10 @@ export const swapPrompt = 'Swap 100 USDC to ETH using Uniswap on Ethereum'
 
 export const swapRes = {
   "platform": "Uniswap",
-  "chain": "Ethereum",
+  "chain": {
+    "origin": "Ethereum",
+    "dest": "Ethereum"
+  },
   "action": "swap",
   "relations": [
     {
