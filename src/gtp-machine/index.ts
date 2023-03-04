@@ -1,9 +1,15 @@
 import { Configuration, OpenAIApi } from 'openai'
+import * as util from 'util'
 
 import envVars from '../config/env-vars'
 import { generateFewShotPrompt } from './few-shot'
-import { GTPResponse } from './types'
-import GTPMapping, { GTPMappingReturn } from './mappings'
+import {
+  GTPResponse,
+  GTPMappingReturn,
+  GTPCombineReturn,
+} from './types'
+import GTPMapping from './mappings'
+import GTPCombine from './combine'
 import { swapRes } from '../examples/swap'
 
 const configuration = new Configuration({
@@ -54,5 +60,12 @@ export default class GTPMachine {
   static generateExample(): GTPGenerateResponse {
     const parsedRes = swapRes as GTPResponse
     return GTPMapping.mapActions(parsedRes)
+  }
+
+  static combine(gtpRes: GTPMappingReturn[]): GTPCombineReturn {
+    console.log(util.inspect(gtpRes, false, null, true))
+    const res = GTPCombine.combine(gtpRes)
+    console.log(util.inspect(res, false, null, true))
+    return res
   }
 }

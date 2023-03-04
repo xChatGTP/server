@@ -23,7 +23,7 @@ Analyze in JSON format:
   ]
 }
 ########
-Prompt: Swap 1 AVAX to USDC using Pangolin on Avalanche
+Prompt: Convert 1 AVAX to USDC using Pangolin on Avalanche
 Analyze in JSON format: 
 {
   "platform": "Pangolin",
@@ -37,6 +37,29 @@ Analyze in JSON format:
       "relation": "from",
       "entity": "AVAX",
       "value": "1"
+    },
+    {
+      "relation": "to",
+      "entity": "USDC",
+      "value": "null"
+    }
+  ]
+}
+########
+Prompt: Swap all bridged MATIC to USDC on Ethereum
+Analyze in JSON format: 
+{
+  "platform": "Uniswap",
+  "chain": {
+    "origin": "Ethereum",
+    "dest": "Ethereum"
+  },
+  "action": "swap",
+  "relations": [
+    {
+      "relation": "from",
+      "entity": "MATIC",
+      "value": "all"
     },
     {
       "relation": "to",

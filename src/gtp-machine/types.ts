@@ -48,6 +48,7 @@ export interface MapSwapReturn extends MapReadableReturn {
     amountOut?: string,
     amountOutMinimum?: string,
     tokenIn?: string,
+    tokenOut?: string,
     fee?: string,
     sqrtPriceLimitX96?: string,
   },
@@ -56,5 +57,14 @@ export interface MapSwapReturn extends MapReadableReturn {
 }
 
 export interface MapBridgeReturn extends MapReadableReturn {
+  fn: string,
+  selector: string,
+}
 
+export type GTPMappingReturn = MapSwapReturn | MapBridgeReturn
+
+export interface GTPCombineReturn {
+  tos: string[],
+  datas: string[],
+  configs: string[],
 }

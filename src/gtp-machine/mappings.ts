@@ -1,16 +1,16 @@
 import { default as bnjs } from 'bignumber.js'
-import { BigNumber, utils } from 'ethers'
+import { BigNumber, constants, utils } from 'ethers'
 
 import { NATIVE_TOKENS, TOKENS, ZERO_ADDRESS } from './constants'
 import {
   GTPResponse,
+  GTPMappingReturn,
   MapBridgeReturn,
   MapSwapAction,
   MapSwapReturn,
   MapSwapUniswapFee,
 } from './types'
-
-export type GTPMappingReturn = MapSwapReturn | MapBridgeReturn
+import {strip0x} from './utils'
 
 export default class GTPMapping {
   private static supportedChains = {
@@ -49,6 +49,7 @@ export default class GTPMapping {
     const [fromEntity, toEntity] = [from.entity.toUpperCase(), to.entity.toUpperCase()]
     // @ts-ignore
     let [fromToken, toToken] = [TOKENS[chain][fromEntity], TOKENS[chain][toEntity]]
+    console.log(fromToken, toToken)
     if (!fromToken || !toToken) throw new Error('Invalid swap tokens!')
 
     // Native token check
@@ -67,7 +68,7 @@ export default class GTPMapping {
     const decimals = this.getDecimals(from.entity.toUpperCase())
 
     const ret: MapSwapReturn = {
-      fn: '',
+      fn: 'swap',
       selector: '',
       args: {},
       argsOrder: [],
@@ -97,13 +98,22 @@ export default class GTPMapping {
       ret.readable.platform = 'uniswap'
 
       if (action === MapSwapAction.NATIVE_TO_TOKEN) {
-        ret.fn = 'exactInputFromEther(bytes,uint256,uint256)'
-        ret.selector = 'b5619b55'
-        ret.argsOrder = ['path', 'amountIn', 'amountOutMinimum']
-        // TODO: dynamic fee based to toToken (for Uniswap)
-        ret.args.path = this.encodePath([fromToken, toToken], [500])
-        ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+        ret.fn = 'exactInputSingleFromEther(address,uint24,uint256,uint256,uint160)'
+        ret.selector = '8aa5b89b'
+        ret.argsOrder = ['tokenOut', 'fee', 'amountIn', 'amountOutMinimum', 'sqrtPriceLimitX96']
+        ret.args.tokenOut = utils.hexZeroPad(toToken, 32) // zero-pad to 32 bytes for our customer uniswap handler
+        // TODO: dynamic fee based on fromToken (pool dependent)
+        ret.args.fee = this.zeroPadHex('100', 32) // 0.01% fee
+
+        // all => dynamic param to be replaced
+        if (from.value === 'all') {
+          ret.args.amountIn = constants.MaxUint256.toString()
+        } else {
+          ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+        }
+
         ret.args.amountOutMinimum = this.zeroPadHex('1', 32) // set to min, 1 (incl decimals)
+        ret.args.sqrtPriceLimitX96 = this.zeroPadHex('0', 32)
       } else if (action === MapSwapAction.TOKEN_TO_NATIVE) {
         ret.fn = 'exactInputSingleToEther(address,uint24,uint256,uint256,uint160)'
         ret.selector = 'e473efd3'
@@ -111,12 +121,42 @@ export default class GTPMapping {
         ret.args.tokenIn = utils.hexZeroPad(fromToken, 32) // zero-pad to 32 bytes for our customer uniswap handler
         // TODO: dynamic fee based on fromToken (pool dependent)
         ret.args.fee = this.zeroPadHex('100', 32) // 0.01% fee
-        ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+
+        // all => dynamic param to be replaced
+        if (from.value === 'all') {
+          ret.args.amountIn = constants.MaxUint256.toString()
+        } else {
+          ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+        }
+
+        ret.args.amountOutMinimum = this.zeroPadHex('1', 32) // set to min, 1 (incl decimals)
+        ret.args.sqrtPriceLimitX96 = this.zeroPadHex('0', 32)
+      } else if (action === MapSwapAction.TOKEN_TO_TOKEN) {
+        ret.fn = 'exactInputSingle(address,address,uint24,uint256,uint256,uint160)'
+        ret.selector = 'a2608210'
+        ret.argsOrder = ['tokenIn', 'tokenOut', 'fee', 'amountIn', 'amountOutMinimum', 'sqrtPriceLimitX96']
+        ret.args.tokenIn = utils.hexZeroPad(fromToken, 32) // zero-pad to 32 bytes for our customer uniswap handler
+        ret.args.tokenOut = utils.hexZeroPad(toToken, 32)
+        // TODO: dynamic fee based on fromToken (pool dependent)
+        ret.args.fee = this.zeroPadHex('3000', 32) // 0.3% fee (for most assets)
+
+        // all => dynamic param to be replaced
+        if (from.value === 'all') {
+          ret.args.amountIn = constants.MaxUint256.toString()
+        } else {
+          ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+        }
+
         ret.args.amountOutMinimum = this.zeroPadHex('1', 32) // set to min, 1 (incl decimals)
         ret.args.sqrtPriceLimitX96 = this.zeroPadHex('0', 32)
       }
       // TODO: TOKEN_TO_TOKEN
+      // ret.argsOrder = ['path', 'amountIn', 'amountOutMinimum']
+      // ret.args.path = this.encodePath([fromToken, toToken], [500])
+      // ret.args.amountIn = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+      // ret.args.amountOutMinimum = this.zeroPadHex('1', 32) // set to min, 1 (incl decimals)
 
+      // Don't include selector (for less steps when combining)
       ret.calldata += this.combineArgs(ret.argsOrder, ret.args)
     }
 
@@ -165,6 +205,7 @@ export default class GTPMapping {
 
     return {
       fn: 'bridge',
+      selector: '00000000',
       readable: {
         chain: {
           origin: chain.origin,
@@ -221,17 +262,13 @@ export default class GTPMapping {
       //     bytes20(address(weth)),
       //     bytes3(uint24(60)),
       //     bytes20(address(usdc)),
-      //     bytes3(uint24(10)),
-      //     bytes20(address(usdt)),
-      //     bytes3(uint24(60)),
-      //     bytes20(address(wbtc))
       // );
-      console.log(this.strip0x(String(path[i])), this.uniswapFeeToHex(fees[i]))
-      encoded += this.strip0x(path[i]) // 20 byte encoding of the address (no 12 byte of 0-padding)
+      console.log(strip0x(String(path[i])), this.uniswapFeeToHex(fees[i]))
+      encoded += strip0x(path[i]) // 20 byte encoding of the address (no 12 byte of 0-padding)
       encoded += this.uniswapFeeToHex(fees[i]) // 3 byte encoding of the fee
     }
     // encode the final token
-    encoded += this.strip0x(path[path.length - 1])
+    encoded += strip0x(path[path.length - 1])
 
     return encoded.toLowerCase()
   }
@@ -245,13 +282,9 @@ export default class GTPMapping {
     return fee.toString(16).padStart(6, '0') // 3 hex, 3 0's default prepend
   }
 
-  private static strip0x(str: string): string {
-    return str.slice(0, 2) === '0x' ? str.slice(2) : str
-  }
-
   private static combineArgs(argsOrder: string[], args: { [key: string]: any }): string {
     let ret = '' // don't prepend 0x
-    for (const argName of argsOrder) ret += this.strip0x(args[argName])
+    for (const argName of argsOrder) ret += strip0x(args[argName])
     return ret
   }
 
