@@ -41,7 +41,7 @@ export default class GTPCombine {
         const { args: { amountIn } } = firstTxRes as MapSwapReturn
         if (!amountIn) throw new Error('Invalid amountIn for the first tx!')
 
-        let data = `0x${FN_SIGS.inject.inject}`
+        let data = `0x${FN_SIGS.funds.inject}`
         data += strip0x(utils.hexZeroPad(utils.hexlify(64), 32)) // 00...040
         data += strip0x(utils.hexZeroPad(utils.hexlify(128), 32)) // 00...080
 
@@ -51,7 +51,7 @@ export default class GTPCombine {
         data += strip0x(utils.hexZeroPad(utils.hexlify(1), 32)) // one amount data
         data += strip0x(amountIn) // deposit amount
 
-        res.tos.push(HANDLERS[chain].inject) // inject addr
+        res.tos.push(HANDLERS[chain].funds) // inject addr
         res.configs.push(ZERO_CONFIG) // no config for inject
         res.datas.push(data) // inject calldata
       }
@@ -128,6 +128,7 @@ export default class GTPCombine {
 
       // Push: address
       if (curAction !== 'bridge') {
+        console.log(chain.origin, platform)
         res.tos.push(HANDLERS[chain.origin][platform])
       } else {
         res.tos.push(ZERO_ADDRESS)

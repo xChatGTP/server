@@ -61,7 +61,18 @@ export interface MapBridgeReturn extends MapReadableReturn {
   selector: string,
 }
 
-export type GTPMappingReturn = MapSwapReturn | MapBridgeReturn
+export interface MapSendReturn extends MapReadableReturn {
+  fn: string,
+  selector: string,
+  args: {
+    token: string,
+    to: string,
+    amount: string,
+  },
+  calldata: string,
+}
+
+export type GTPMappingReturn = MapSwapReturn | MapBridgeReturn | MapSendReturn
 
 export interface GTPCombineReturn {
   tos: string[],

@@ -66,6 +66,7 @@ export default class GTPMachine {
     console.log(util.inspect(gtpRes, false, null, true))
     const res = GTPCombine.combine(gtpRes)
     console.log(util.inspect(res, false, null, true))
+    // console.log(JSON.stringify(res.tos), JSON.stringify(res.configs), JSON.stringify(res.datas))
     return res
   }
 }

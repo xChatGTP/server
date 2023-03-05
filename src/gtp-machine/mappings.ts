@@ -1,7 +1,7 @@
 import { default as bnjs } from 'bignumber.js'
 import { BigNumber, constants, utils } from 'ethers'
 
-import { NATIVE_TOKENS, TOKENS, ZERO_ADDRESS } from './constants'
+import {FN_SIGS, NATIVE_TOKENS, TOKENS, ZERO_ADDRESS} from './constants'
 import {
   GTPResponse,
   GTPMappingReturn,
@@ -9,13 +9,14 @@ import {
   MapSwapAction,
   MapSwapReturn,
   MapSwapUniswapFee,
+  MapSendReturn,
 } from './types'
-import {strip0x} from './utils'
+import { strip0x } from './utils'
 
 export default class GTPMapping {
   private static supportedChains = {
-    swap: ['ethereum', 'polygon'],
-    bridge: ['ethereum', 'polygon'],
+    swap: ['ethereum', 'polygon', 'avalanche', 'moonbase'],
+    bridge: ['ethereum', 'polygon', 'avalanche', 'moonbase'],
   }
 
   private static supportedPlatforms = {
@@ -23,15 +24,77 @@ export default class GTPMapping {
     bridge: ['bridge'],
   }
 
-  private static supportedTokens = {
-    swap: ['ETH', 'MATIC', 'USDC'],
-    bridge: ['ETH', 'MATIC'], // only native tokens (Axelar restriction)
-  }
+  // private static supportedTokens = {
+  //   swap: ['ETH', 'MATIC', 'USDC'],
+  //   bridge: ['ETH', 'MATIC'], // only native tokens (Axelar restriction)
+  // }
 
   public static mapActions(inp: GTPResponse): GTPMappingReturn {
     if (inp.action === 'swap') return this.mapSwap(inp)
     else if (inp.action === 'bridge') return this.mapBridge(inp)
+    else if (inp.action === 'send') return this.mapSend(inp)
     throw new Error('Invalid action!')
+  }
+
+  private static mapSend(inp: GTPResponse): MapSendReturn {
+    const { relations } = inp
+    const chain = inp.chain.origin.toLowerCase()
+
+    const from = relations.find(r => r.relation === 'from')
+    const to = relations.find(r => r.relation === 'to')
+    if (!from || !to) throw new Error('Invalid swap relations!')
+
+    const [fromEntity, toEntity] = [from.entity.toUpperCase(), to.entity.toUpperCase()]
+    let fromToken = TOKENS[chain][fromEntity]
+    console.log(fromEntity, chain, fromToken)
+    if (!fromToken) throw new Error('Invalid send token!')
+
+    const toAddress = to.value
+    if (!utils.isAddress(toAddress)) throw new Error('Invalid send address!')
+
+    if (fromToken === ZERO_ADDRESS) fromToken = this.getWrappedNativeToken(chain)
+
+    const ret: MapSendReturn = {
+      fn: 'sendToken(address,uint256,address)',
+      selector: FN_SIGS.funds.send,
+      args: {
+        token: utils.hexZeroPad(fromToken, 32),
+        amount: '',
+        to: utils.hexZeroPad(toAddress, 32),
+      },
+      calldata: '0x',
+      readable: {
+        action: 'send',
+        platform: 'funds',
+        chain: {
+          origin: chain,
+          dest: chain,
+        },
+        tokens: [
+          {
+            name: fromEntity,
+            address: fromToken,
+            relation: 'from',
+          },
+          {
+            name: toEntity,
+            address: toAddress,
+            relation: 'to',
+          },
+        ]
+      },
+    }
+
+    if (from.value === 'all') {
+      ret.args.amount = constants.MaxUint256.toString()
+    } else {
+      const decimals = this.getDecimals(from.entity.toUpperCase())
+      ret.args.amount = this.zeroPadHex(this.decimalNumber(from.value, decimals), 32)
+    }
+
+    ret.calldata += this.combineArgs(['token', 'amount', 'to'], ret.args)
+
+    return ret
   }
 
   private static mapSwap(inp: GTPResponse): MapSwapReturn {

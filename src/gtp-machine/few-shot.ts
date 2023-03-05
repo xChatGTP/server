@@ -92,15 +92,15 @@ Analyze in JSON format:
   ]
 }
 ########
-Prompt: LP all MATIC and USDC on Uniswap on Polygon
+Prompt: Send all bridged MATIC to 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889 on Moonbeam
 Analyze in JSON format:
 {
-  "platform": "Uniswap",
+  "platform": "Send",
   "chain": {
-    "origin": "Polygon",
-    "dest": "Polygon"
+    "origin": "Moonbeam",
+    "dest": "Moonbeam"
   },
-  "action": "liquidity provide",
+  "action": "send",
   "relations": [
     {
       "relation": "from",
@@ -108,9 +108,9 @@ Analyze in JSON format:
       "value": "all"
     },
     {
-      "relation": "from",
-      "entity": "USDC",
-      "value": "all"
+      "relation": "to",
+      "entity": "SEND_USER",
+      "value": "0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889"
     }
   ]
 }
@@ -120,3 +120,29 @@ Analyze in JSON format:
 export function generateFewShotPrompt(prompt: string): string {
   return `${fewShotPrompt}\nPrompt: ${prompt}\nAnalyze in JSON format:`
 }
+
+
+// ########
+// Prompt: LP all MATIC and USDC on Uniswap on Polygon
+// Analyze in JSON format:
+// {
+//   "platform": "Uniswap",
+//   "chain": {
+//   "origin": "Polygon",
+//     "dest": "Polygon"
+// },
+//   "action": "liquidity provide",
+//   "relations": [
+//   {
+//     "relation": "from",
+//     "entity": "MATIC",
+//     "value": "all"
+//   },
+//   {
+//     "relation": "from",
+//     "entity": "USDC",
+//     "value": "all"
+//   }
+// ]
+// }
+// ########
